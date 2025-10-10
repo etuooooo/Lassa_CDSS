@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Lassa Fever CDSS — Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+  <style>
+    body { padding: 24px; }
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h3 class="mb-3">AI-Driven Lassa Fever CDSS — Demo</h3>
+    <p class="text-muted">Threshold: <span class="mono">{{ threshold }}</span> (calibrated probabilities)</p>
+
+    <form id="form">
+      <div class="feature-grid">
+        {% for f in feature_cols %}
+        <div class="mb-2">
+          <label class="form-label mono">{{ f }}</label>
+          <input class="form-control" type="number" step="any" name="{{ f }}" placeholder="0/1 for symptoms; numeric for vitals" required>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Top-k contributors</label>
+        <input class="form-control" type="number" name="top_k" value="5" min="1" max="13">
+      </div>
+      <button class="btn btn-primary" type="submit">Predict</button>
+    </form>
+
+    <div id="result" class="card mt-4" style="display:none;">
+      <div class="card-body">
+        <h5 class="card-title">Prediction Result</h5>
+        <p class="card-text">
+          Outcome: <strong id="pred-label"></strong><br/>
+          Probability: <strong id="pred-prob"></strong>
+          <small class="text-muted">(threshold = <span id="pred-thr"></span>)</small>
+        </p>
+
+        <h6>Top contributing features</h6>
+        <table class="table table-sm">
+          <thead><tr><th>Feature</th><th>Value</th><th>Contribution</th></tr></thead>
+          <tbody id="top-features"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+document.getElementById("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = new FormData(e.target);
+  const body = {};
+  for (const [k,v] of form.entries()) body[k] = Number(v);
+
+  const res = await fetch("/predict", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+
+  document.getElementById("pred-label").textContent =
+    data.label ? "Likely Lassa fever" : "Unlikely Lassa fever";
+  document.getElementById("pred-prob").textContent = (data.probability*100).toFixed(1) + "%";
+  document.getElementById("pred-thr").textContent = data.threshold.toFixed(2);
+
+  const tbody = document.getElementById("top-features");
+  tbody.innerHTML = "";
+  (data.top_contributors || []).forEach(r => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.feature}</td><td>${r.value}</td><td>${r.contribution.toFixed(3)}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById("result").style.display = "block";
+});
+</script>
+</body>
+</html>

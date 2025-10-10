@@ -1,0 +1,15 @@
+[
+  "fever",
+  "sore_throat",
+  "vomiting",
+  "headache",
+  "muscle_pain",
+  "abdominal_pain",
+  "diarrhea",
+  "bleeding",
+  "hearing_loss",
+  "fatigue",
+  "temp_c",
+  "heart_rate",
+  "spo2"
+]
