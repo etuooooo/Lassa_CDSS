@@ -1,84 +1,164 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <title>Lassa Fever CDSS — Demo</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"/>
+  <meta charset="UTF-8">
+  <title>AI-Driven Lassa Fever CDSS</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://kit.fontawesome.com/a2d9d2c7d9.js" crossorigin="anonymous"></script>
   <style>
-    body { padding: 24px; }
-    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    body {
+      background: linear-gradient(135deg, #f8f9fa, #e9f2ff);
+      font-family: "Segoe UI", sans-serif;
+      min-height: 100vh;
+    }
+    .main-card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+      padding: 2rem;
+      transition: transform 0.3s;
+    }
+    .main-card:hover { transform: translateY(-3px); }
+    .highlight { background-color: #fff8e1; transition: background-color 1s ease; }
+    .sensor-active { animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0% { background-color: #e6f7ff; }
+      50% { background-color: #cceeff; }
+      100% { background-color: #e6f7ff; }
+    }
+    .form-section { margin-top: 2rem; }
+    h1 span { color: #0d6efd; }
   </style>
 </head>
+
 <body>
-  <div class="container">
-    <h3 class="mb-3">AI-Driven Lassa Fever CDSS — Demo</h3>
-    <p class="text-muted">Threshold: <span class="mono">{{ threshold }}</span> (calibrated probabilities)</p>
+  <div class="container py-5">
+    <div class="main-card mx-auto col-lg-8 col-md-10">
+      <h1 class="text-center mb-4">
+        <i class="fas fa-virus text-danger"></i>
+        <span>AI-Driven Lassa Fever Predictor</span>
+      </h1>
 
-    <form id="form">
-      <div class="feature-grid">
-        {% for f in feature_cols %}
-        <div class="mb-2">
-          <label class="form-label mono">{{ f }}</label>
-          <input class="form-control" type="number" step="any" name="{{ f }}" placeholder="0/1 for symptoms; numeric for vitals" required>
+      <!-- Info -->
+      <div class="alert alert-info shadow-sm" role="alert">
+        🧭 Fill in the personal details, symptoms, and vital signs to receive an AI prediction.
+        <div id="sensor-status" class="mt-2 small fst-italic text-muted">
+          <i class="fas fa-satellite-dish"></i> No sensor data received yet
         </div>
-        {% endfor %}
       </div>
-      <div class="mb-3">
-        <label class="form-label">Top-k contributors</label>
-        <input class="form-control" type="number" name="top_k" value="5" min="1" max="13">
-      </div>
-      <button class="btn btn-primary" type="submit">Predict</button>
-    </form>
 
-    <div id="result" class="card mt-4" style="display:none;">
-      <div class="card-body">
-        <h5 class="card-title">Prediction Result</h5>
-        <p class="card-text">
-          Outcome: <strong id="pred-label"></strong><br/>
-          Probability: <strong id="pred-prob"></strong>
-          <small class="text-muted">(threshold = <span id="pred-thr"></span>)</small>
-        </p>
-
-        <h6>Top contributing features</h6>
-        <table class="table table-sm">
-          <thead><tr><th>Feature</th><th>Value</th><th>Contribution</th></tr></thead>
-          <tbody id="top-features"></tbody>
-        </table>
+      {% if message %}
+      <div class="alert alert-{{ message_class }} mt-3" role="alert">
+        {{ message }}
       </div>
+      {% endif %}
+
+      <form method="POST" action="/" class="needs-validation" novalidate>
+        <!-- Personal Info -->
+        <div class="form-section">
+          <h4 class="text-primary mb-3"><i class="fas fa-user-circle"></i> Personal Information</h4>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <input type="text" name="name" class="form-control" placeholder="Full Name" required>
+            </div>
+            <div class="col-md-3">
+              <input type="number" name="age" class="form-control" placeholder="Age" required>
+            </div>
+            <div class="col-md-3">
+              <select name="gender" class="form-select" required>
+                <option value="">Gender</option>
+                <option>Male</option>
+                <option>Female</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Symptoms -->
+        <div class="form-section">
+          <h4 class="text-danger mb-3"><i class="fas fa-stethoscope"></i> Symptoms</h4>
+          <div class="row">
+            {% for symptom in symptoms %}
+            <div class="col-md-6 mb-3">
+              <label class="form-label">{{ symptom.replace('_',' ').title() }}</label>
+              <select name="{{ symptom }}" class="form-select" required>
+                <option value="">-- Select --</option>
+                <option value="0">No</option>
+                <option value="1">Yes</option>
+              </select>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Vitals -->
+        <div class="form-section">
+          <h4 class="text-success mb-3 d-flex align-items-center justify-content-between">
+            <span><i class="fas fa-heartbeat"></i> Vital Signs</span>
+            <button type="button" id="refresh-vitals" class="btn btn-sm btn-outline-primary">
+              <i id="refresh-icon" class="fas fa-sync-alt"></i> Sync Sensor Data
+            </button>
+          </h4>
+
+          <div class="row g-3">
+            <div class="col-md-4">
+              <input type="number" step="0.1" name="temperature" id="temperature" class="form-control" placeholder="Temperature (°C)" required>
+            </div>
+            <div class="col-md-4">
+              <input type="number" name="heart_rate" id="heart_rate" class="form-control" placeholder="Heart Rate (bpm)" required>
+            </div>
+            <div class="col-md-4">
+              <input type="number" step="0.1" name="oxygen_level" id="oxygen_level" class="form-control" placeholder="Oxygen Level (%)" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-center mt-4">
+          <button type="submit" class="btn btn-primary btn-lg px-5">
+            <i class="fas fa-microscope"></i> Predict
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
-<script>
-document.getElementById("form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const form = new FormData(e.target);
-  const body = {};
-  for (const [k,v] of form.entries()) body[k] = Number(v);
+  <script>
+    // Highlight updated fields
+    function flashField(id) {
+      const el = document.getElementById(id);
+      el.classList.add("highlight");
+      setTimeout(() => el.classList.remove("highlight"), 1000);
+    }
 
-  const res = await fetch("/predict", {
-    method:"POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify(body)
-  });
-  const data = await res.json();
+    function updateFormWithSensorData(data) {
+      if (data.temperature) { document.getElementById("temperature").value = data.temperature; flashField("temperature"); }
+      if (data.heart_rate) { document.getElementById("heart_rate").value = data.heart_rate; flashField("heart_rate"); }
+      if (data.oxygen_level) { document.getElementById("oxygen_level").value = data.oxygen_level; flashField("oxygen_level"); }
 
-  document.getElementById("pred-label").textContent =
-    data.label ? "Likely Lassa fever" : "Unlikely Lassa fever";
-  document.getElementById("pred-prob").textContent = (data.probability*100).toFixed(1) + "%";
-  document.getElementById("pred-thr").textContent = data.threshold.toFixed(2);
+      const statusEl = document.getElementById("sensor-status");
+      if (data.timestamp) {
+        const secsAgo = Math.floor((Date.now()/1000 - data.timestamp));
+        statusEl.innerHTML = `<i class="fas fa-satellite text-success"></i> Sensor data received ${secsAgo}s ago`;
+      } else {
+        statusEl.innerHTML = `<i class="fas fa-satellite text-warning"></i> Using cached data`;
+      }
+    }
 
-  const tbody = document.getElementById("top-features");
-  tbody.innerHTML = "";
-  (data.top_contributors || []).forEach(r => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${r.feature}</td><td>${r.value}</td><td>${r.contribution.toFixed(3)}</td>`;
-    tbody.appendChild(tr);
-  });
+    function fetchSensorData() {
+      const icon = document.getElementById("refresh-icon");
+      const statusEl = document.getElementById("sensor-status");
+      icon.classList.add("fa-spin");
+      statusEl.textContent = "Fetching sensor data...";
 
-  document.getElementById("result").style.display = "block";
-});
-</script>
+      fetch("/api/latest_vitals")
+        .then(res => res.json())
+        .then(data => updateFormWithSensorData(data))
+        .catch(() => { statusEl.textContent = "⚠️ Sensor data unavailable"; })
+        .finally(() => { setTimeout(() => icon.classList.remove("fa-spin"), 1200); });
+    }
+
+    document.getElementById("refresh-vitals").addEventListener("click", fetchSensorData);
+    window.addEventListener("load", fetchSensorData);
+  </script>
 </body>
 </html>
