@@ -5,7 +5,6 @@
   <title>Lassa Fever AI Prediction Result</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://kit.fontawesome.com/a2d9d2c7d9.js" crossorigin="anonymous"></script>
-
   <style>
     body {
       background: linear-gradient(135deg, #f8f9fa, #e9f2ff);
@@ -17,80 +16,106 @@
       border-radius: 18px;
       box-shadow: 0 8px 24px rgba(0,0,0,0.1);
       padding: 2rem;
-      max-width: 950px;
+      max-width: 980px;
       margin: 40px auto;
     }
-    .title {
-      font-weight: 700;
-      color: #0d6efd;
-    }
-    .legend {
-      display: flex;
-      justify-content: center;
-      gap: 30px;
-      margin: 10px 0 25px 0;
-      font-size: 15px;
-    }
-    .legend span {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .legend .red-box, .legend .blue-box {
-      width: 18px; height: 18px; border-radius: 4px;
-    }
-    .legend .red-box { background-color: #ff7f7f; }
-    .legend .blue-box { background-color: #6ec1ff; }
+    .legend { display: flex; gap: 24px; font-size: 14px; margin: 6px 0 18px; }
+    .legend .box { width: 16px; height: 16px; border-radius: 4px; display: inline-block; }
+    .legend .red { background-color: #ff7f7f; }
+    .legend .blue { background-color: #6ec1ff; }
     .summary-note {
       background: #f0f7ff;
       border-left: 5px solid #0d6efd;
       border-radius: 10px;
       padding: 1rem;
       margin-top: 1rem;
-      font-size: 15px;
+      font-size: 14px;
     }
+    .table thead th { background:#f5f8ff; }
+    .badge-up { background:#ffe1e1; color:#b00000; }
+    .badge-down { background:#e1f3ff; color:#004a8f; }
   </style>
 </head>
-
 <body>
   <div class="container">
     <div class="result-card">
-      <h2 class="title mb-4"><i class="fas fa-microscope"></i> Prediction Result</h2>
+      <h2 class="mb-3 text-primary"><i class="fas fa-microscope"></i> Prediction Result</h2>
 
       {% if name %}
       <p class="mb-1"><strong>Patient:</strong> {{ name }}</p>
       {% endif %}
       <p class="mb-1"><strong>Outcome:</strong> {{ prediction }}</p>
-      <p class="mb-4"><strong>Predicted Probability:</strong> {{ probability }}%</p>
+      <p class="mb-3"><strong>Predicted Probability:</strong> {{ probability }}%</p>
 
       <hr>
 
-      <h4 class="mt-4 mb-2 text-secondary"><i class="fas fa-chart-line"></i> AI Explanation (SHAP)</h4>
+      <h4 class="mt-3 mb-2 text-secondary">
+        <i class="fas fa-chart-line"></i> AI Explanation (SHAP)
+        {% if plot_type %}<small class="text-muted">— {{ plot_type|capitalize }} view</small>{% endif %}
+      </h4>
 
-      <!-- Color Legend -->
+      <!-- Legend -->
       <div class="legend">
-        <span><span class="red-box"></span> <b>Red:</b> Increases likelihood of Lassa Fever</span>
-        <span><span class="blue-box"></span> <b>Blue:</b> Decreases likelihood</span>
+        <span><span class="box red"></span> <b>Red:</b> increases likelihood</span>
+        <span><span class="box blue"></span> <b>Blue:</b> decreases likelihood</span>
       </div>
 
-      <!-- Embed SHAP Force Plot -->
-      <iframe src="{{ url_for('static', filename=shap_iframe_src) }}"
-              style="width:100%; height:420px; border:none; border-radius:12px;"></iframe>
+      <!-- SHAP visualization -->
+      {% if shap_iframe_src %}
+        <!-- Interactive (force plot) -->
+        <iframe src="{{ url_for('static', filename=shap_iframe_src) }}"
+                style="width:100%; height:420px; border:none; border-radius:12px; background:white;"></iframe>
+      {% elif shap_img_src %}
+        <!-- Static (bar or waterfall) -->
+        <img src="{{ url_for('static', filename=shap_img_src) }}" class="img-fluid rounded" alt="SHAP Explanation">
+      {% else %}
+        <p class="text-muted">No explanation available.</p>
+      {% endif %}
 
-      <!-- Simple Interpretation Note -->
+      <!-- Friendly interpretation -->
       <div class="summary-note">
-        <p><i class="fas fa-info-circle text-primary"></i>
-          <b>How to read the chart:</b> Each bar represents how much a symptom or vital sign affected the AI’s decision.
-          <span class="text-danger">Red features</span> pushed the prediction toward <b>“Likely Lassa Fever”</b>,
-          while <span class="text-primary">blue features</span> reduced the likelihood.
-          Longer bars mean the feature had a stronger influence on this result.
+        <p class="mb-0"><i class="fas fa-info-circle text-primary"></i>
+          <b>How to read this:</b> Each feature (symptom or vital) nudges the AI’s decision.
+          <span class="text-danger">Red bars</span> push toward <b>“Likely Lassa Fever”</b>; 
+          <span class="text-primary">blue bars</span> push away. Longer bars = stronger influence.
         </p>
       </div>
 
-      <div class="d-flex justify-content-end mt-4">
-        <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
-          <i class="fas fa-arrow-left"></i> New Prediction
-        </a>
+      <!-- Top-5 contributors table -->
+      <h5 class="mt-4">Top 5 contributing factors</h5>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Entered Value</th>
+              <th>Direction</th>
+              <th class="text-end">Contribution (|SHAP|)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in top_features %}
+            <tr>
+              <td>{{ r.feature }}</td>
+              <td>{{ r.value }}</td>
+              <td>
+                {% if r.contribution > 0 %}
+                  <span class="badge badge-up">↑ increases risk</span>
+                {% elif r.contribution < 0 %}
+                  <span class="badge badge-down">↓ decreases risk</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">– no effect</span>
+                {% endif %}
+              </td>
+              <td class="text-end">{{ r.impact | round(5) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-end mt-3 gap-2">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-primary"><i class="fas fa-arrow-left"></i> New Prediction</a>
       </div>
     </div>
   </div>
