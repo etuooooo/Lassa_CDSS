@@ -12,3 +12,4 @@ joblib
 matplotlib
 seaborn
 supabase
+reportlab
