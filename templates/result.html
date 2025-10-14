@@ -1,23 +1,115 @@
-{% if shap_iframe_src %}
-  <!-- Interactive (force plot) -->
-  <iframe src="{{ url_for('static', filename=shap_iframe_src) }}"
-          style="width:100%; height:420px; border:none; border-radius:12px; background:white;"></iframe>
-{% elif shap_img_src %}
-  <!-- Static (bar or waterfall) -->
-  <img src="{{ url_for('static', filename=shap_img_src) }}?t={{ cache_bust }}"
-       class="img-fluid rounded mb-3" alt="SHAP Explanation">
-{% else %}
-  <p class="text-muted">No explanation available.</p>
-{% endif %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lassa Fever AI Prediction Result</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://kit.fontawesome.com/a2d9d2c7d9.js" crossorigin="anonymous"></script>
+  <style>
+    body { background: linear-gradient(135deg, #f8f9fa, #e9f2ff); font-family: "Segoe UI", sans-serif; }
+    .result-card { background:#fff; border-radius:18px; box-shadow:0 8px 24px rgba(0,0,0,0.1); padding:2rem; max-width:980px; margin:40px auto; }
+    .legend { display:flex; gap:24px; font-size:14px; margin:6px 0 12px; }
+    .legend .box { width:16px; height:16px; border-radius:4px; display:inline-block; }
+    .legend .red { background:#ff7f7f; } .legend .blue { background:#6ec1ff; }
 
-<div class="d-flex gap-2 mb-3">
-  {% if shap_img_src %}
-    <a class="btn btn-outline-secondary"
-       href="{{ url_for('download_shap_png') }}?name={{ download_filename }}">
-      ⬇️ Download PNG
-    </a>
-  {% endif %}
-  <a class="btn btn-primary" href="{{ url_for('download_result_pdf') }}">
-    ⬇️ Download PDF Report
-  </a>
-</div>
+    /* Responsive SHAP wrapper: keeps image visible without taking over the page */
+    .shap-wrap { max-height: 520px; overflow: auto; border-radius:12px; background:#fff; }
+    .shap-img { width:100%; height:auto; display:block; }
+
+    .summary-note { background:#f0f7ff; border-left:5px solid #0d6efd; border-radius:10px; padding:1rem; margin-top:1rem; font-size:14px; }
+    .table thead th { background:#f5f8ff; }
+    .badge-up { background:#ffe1e1; color:#b00000; }
+    .badge-down { background:#e1f3ff; color:#004a8f; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="result-card">
+      <h2 class="mb-3 text-primary"><i class="fas fa-microscope"></i> Prediction Result</h2>
+
+      {% if name %}<p class="mb-1"><strong>Patient:</strong> {{ name }}</p>{% endif %}
+      <p class="mb-1"><strong>Outcome:</strong> {{ prediction }}</p>
+      <p class="mb-3"><strong>Predicted Probability:</strong> {{ probability }}%</p>
+
+      <div class="d-flex gap-2 mb-3">
+        <a class="btn btn-primary" href="{{ url_for('download_result_pdf') }}">⬇️ Download PDF Report</a>
+        <!-- optional: link to view full-size image in new tab (only if PNG exists) -->
+        {% if shap_img_src %}
+          <a class="btn btn-outline-secondary" target="_blank"
+             href="{{ url_for('static', filename=shap_img_src) }}?t={{ cache_bust }}">Open Plot Full-size</a>
+        {% endif %}
+      </div>
+
+      <hr>
+
+      <h4 class="mt-2 mb-2 text-secondary">
+        <i class="fas fa-chart-line"></i> AI Explanation (SHAP)
+        {% if plot_type %}<small class="text-muted">— {{ plot_type|capitalize }} view</small>{% endif %}
+      </h4>
+
+      <div class="legend">
+        <span><span class="box red"></span> <b>Red:</b> increases likelihood</span>
+        <span><span class="box blue"></span> <b>Blue:</b> decreases likelihood</span>
+      </div>
+
+      <!-- SHAP visualization (constrained) -->
+      <div class="shap-wrap">
+        {% if shap_iframe_src %}
+          <iframe src="{{ url_for('static', filename=shap_iframe_src) }}"
+                  style="width:100%; height:480px; border:none; border-radius:12px; background:white;"></iframe>
+        {% elif shap_img_src %}
+          <img class="shap-img"
+               src="{{ url_for('static', filename=shap_img_src) }}?t={{ cache_bust }}"
+               alt="SHAP Explanation">
+        {% else %}
+          <p class="text-muted p-3">No explanation available.</p>
+        {% endif %}
+      </div>
+
+      <div class="summary-note">
+        <p class="mb-0"><i class="fas fa-info-circle text-primary"></i>
+          <b>How to read this:</b> Each feature (symptom or vital) nudges the AI’s decision.
+          <span class="text-danger">Red bars</span> push toward <b>“Likely Lassa Fever”</b>;
+          <span class="text-primary">blue bars</span> push away. Longer bars = stronger influence.
+        </p>
+      </div>
+
+      <h5 class="mt-4">Top 5 contributing factors</h5>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Entered Value</th>
+              <th>Direction</th>
+              <th class="text-end">Contribution (|SHAP|)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in top_features %}
+            <tr>
+              <td>{{ r.feature }}</td>
+              <td>{{ r.value }}</td>
+              <td>
+                {% if r.contribution > 0 %}
+                  <span class="badge badge-up">↑ increases risk</span>
+                {% elif r.contribution < 0 %}
+                  <span class="badge badge-down">↓ decreases risk</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">– no effect</span>
+                {% endif %}
+              </td>
+              <td class="text-end">{{ r.impact | round(5) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex justify-content-end mt-3">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-primary"><i class="fas fa-arrow-left"></i> New Prediction</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
